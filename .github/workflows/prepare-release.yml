@@ -56,7 +56,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$BRANCH"
-          npm version "$VERSION" --no-git-tag-version --ignore-scripts
-          git commit -am "chore: release v$VERSION"
+          npm version "$VERSION" --no-git-tag-version --ignore-scripts --allow-same-version
+          git diff --quiet || git commit -am "chore: release v$VERSION"
           git push origin "$BRANCH"
           gh pr create --base master --head "$BRANCH" --title "Release v$VERSION" --body-file "$RUNNER_TEMP/changeset.md"
