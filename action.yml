@@ -1,4 +1,4 @@
-name: Dokploy CLI
+name: Dokploy CLI Action
 description: Run any command of the official @dokploy/cli, and optionally wait for the deployment to finish. Unofficial.
 author: adepanges
 branding: { icon: upload-cloud, color: blue }
