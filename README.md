@@ -72,11 +72,14 @@ Names are matched exactly. If the same name exists in several projects or enviro
     command: compose save-environment
     compose-id: abc123
     args: |
-      {"env": "NODE_ENV=production\nLOG_LEVEL=info"}
+      env: |
+        NODE_ENV=production
+        LOG_LEVEL=info
 ```
 
-`args` is a JSON object (`true` adds a bare flag, `false`/`null` drops it) or one `--flag value` per line.
-Run `npx @dokploy/cli <group> <command> --help` for a command's flags.
+`args` is a JSON or YAML object: each key becomes `--key value`, `true` adds a bare flag, `false`/`null`
+drops it. Run `npx @dokploy/cli <group> <command> --help` for a command's flags. A malformed `args` or
+`headers` fails with a message that does not quote it, so secrets in it stay out of the log.
 
 ## Inputs
 
@@ -85,7 +88,7 @@ Run `npx @dokploy/cli <group> <command> --help` for a command's flags.
 | `url` | | Dokploy server URL |
 | `api-key` | | Dokploy API key |
 | `command` | | CLI command path, e.g. `compose deploy`, `project all` |
-| `args` | | Flags for the command (see above) |
+| `args` | | Flags for the command, a JSON or YAML object (see above) |
 | `compose-id` / `compose-name` | | Target compose; adds `--composeId` |
 | `application-id` / `application-name` | | Target application; adds `--applicationId` |
 | `project-id` / `environment-id` | | Narrow a `*-name` lookup |
@@ -123,4 +126,4 @@ Releases: run the **Release** workflow (it builds `master`). It builds `dist/`, 
 
 ## License
 
-MIT. Bundled third-party licenses are in `dist/THIRD_PARTY_LICENSES.txt` of each release.
+MIT. Bundled third-party licenses are in `dist/THIRD_PARTY_LICENSES.txt` and `dist/cli/THIRD_PARTY_LICENSES.txt` of each release.

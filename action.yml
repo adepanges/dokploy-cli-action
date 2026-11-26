@@ -6,7 +6,7 @@ inputs:
   url: { description: "Dokploy server URL, e.g. https://dokploy.example.com", required: true }
   api-key: { description: "Dokploy API key", required: true }
   command: { description: "CLI command path, e.g. `compose deploy`, `application redeploy`, `project all`", required: true }
-  args: { description: "Flags for the command: a JSON object ({\"title\":\"x\",\"freshVolumes\":true}) or `--flag value` lines", required: false, default: "" }
+  args: { description: "Flags for the command as a JSON or YAML object, e.g. {\"title\":\"x\",\"freshVolumes\":true}; true adds a bare flag, false/null drops it", required: false, default: "" }
   compose-id: { description: "Target compose id (adds --composeId)", required: false, default: "" }
   compose-name: { description: "Target compose by exact name (use project-id/environment-id if the name is not unique)", required: false, default: "" }
   application-id: { description: "Target application id (adds --applicationId)", required: false, default: "" }

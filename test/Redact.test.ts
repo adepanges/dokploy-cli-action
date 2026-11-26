@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { redact } from "../src/redact.ts";
+import { Redact } from "../src/Redact.ts";
 
-test("redact hides env values and secret fields, keeps the rest", () => {
-  const out = redact({
+test("Redact hides env values and secret fields, keeps the rest", () => {
+  const out = Redact.json({
     name: "app",
     composeId: "abc",
-    env: "# c\nDATABASE_URL=postgres://u:p@h/db\nEMPTY=\n",
+    env: '# c\nDATABASE_URL=postgres://u:p@h/db\nKEY="-----BEGIN KEY-----\nMIIEvQIBADANBg\n-----END KEY-----"\nexport EMPTY=\n',
     previewBuildArgs: "A=1",
+    buildSecrets: ["S=hunter2"],
     databasePassword: "hunter2",
     refreshToken: "t",
     nested: [{ apiKey: "k", environmentId: "e" }],
@@ -15,8 +16,9 @@ test("redact hides env values and secret fields, keeps the rest", () => {
   assert.deepEqual(out, {
     name: "app",
     composeId: "abc",
-    env: ["DATABASE_URL: ok", "EMPTY: ok"],
+    env: ["DATABASE_URL: ok", "KEY: ok", "EMPTY: ok"],
     previewBuildArgs: ["A: ok"],
+    buildSecrets: [["S: ok"]],
     databasePassword: "***",
     refreshToken: "***",
     nested: [{ apiKey: "***", environmentId: "e" }],

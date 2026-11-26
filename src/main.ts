@@ -1,80 +1,22 @@
+import * as core from "@actions/core";
 import { spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { appendFileSync, mkdtempSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Api, type Deployment } from "./api.ts";
-import { deployTarget, parseArgs } from "./args.ts";
-import { redact } from "./redact.ts";
+import { Command } from "./Command.ts";
+import { DokployApi } from "./DokployApi.ts";
+import { Redact } from "./Redact.ts";
 
-const DONE = new Set(["done", "error", "cancelled"]);
-
-const input = (name: string) => (process.env[`INPUT_${name.toUpperCase().replaceAll("-", "_")}`] ?? "").trim();
-const output = (name: string, value: string) => {
-  const eof = `ghadelimiter_${randomUUID()}`;
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${name}<<${eof}\n${value}\n${eof}\n`);
-};
-const sleep = (s: number) => new Promise((r) => setTimeout(r, s * 1000));
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-async function resolveId(api: Api, group: string, kind: string): Promise<string | undefined> {
-  const id = input(`${group}-id`);
-  if (id) return id;
-  const name = input(`${group}-name`);
-  if (!name) return;
-  const params: Record<string, string> = { name, limit: "100" };
-  if (input("project-id")) params.projectId = input("project-id");
-  if (input("environment-id")) params.environmentId = input("environment-id");
-  // shortcut: search is a substring match capped at 100 rows; exact match is filtered here
-  const { items } = await api.get<{ items: Record<string, string>[] }>(`${group}.search`, params);
-  const hits = items.filter((i) => i.name === name);
-  if (hits.length !== 1) {
-    const list = hits.map((h) => `${h[kind]} (environmentId ${h.environmentId})`).join(", ");
-    throw new Error(hits.length ? `${group}-name "${name}" is ambiguous, add project-id or environment-id: ${list}` : `no ${group} named "${name}"`);
-  }
-  return hits[0][kind];
+function seconds(name: string): number {
+  const n = Number(core.getInput(name));
+  if (!Number.isFinite(n) || n <= 0) throw new Error(`${name} must be a positive number of seconds`);
+  return n;
 }
 
-async function waitFor(api: Api, type: string, id: string, before: Set<string>, timeout: number, interval: number) {
-  const deadline = Date.now() + timeout * 1000;
-  while (Date.now() < deadline) {
-    try {
-      const fresh = (await api.deployments(type, id)).find((d) => !before.has(d.deploymentId));
-      if (fresh && DONE.has(fresh.status)) return fresh;
-    } catch (e) {
-      console.log(`::warning::status check failed, retrying: ${message(e)}`);
-    }
-    await sleep(interval);
-  }
-  throw new Error(`deployment did not finish within ${timeout}s`);
-}
-
-async function main() {
-  const url = input("url").replace(/\/+$/, "");
-  const key = input("api-key");
-  const headers: Record<string, string> = input("headers") ? JSON.parse(input("headers")) : {};
-  for (const v of [key, ...Object.values(headers)]) if (v) console.log(`::add-mask::${v}`);
-
-  const command = input("command").split(/\s+/).filter(Boolean);
-  if (!url || !key || !command.length) throw new Error("url, api-key and command are required");
-  const argv = [...command, ...parseArgs(input("args"))];
-  const api = new Api(url, key, headers);
-
-  const deploy = deployTarget(command);
-  const group = command[0];
-  const kind = group === "compose" ? "composeId" : group === "application" ? "applicationId" : undefined;
-  let id: string | undefined;
-  if (kind) {
-    const at = argv.indexOf(`--${kind}`);
-    id = at >= 0 ? argv[at + 1] : await resolveId(api, group, kind);
-    if (at < 0 && id) argv.push(`--${kind}`, id);
-  }
-
-  const wait = input("wait") !== "false" && deploy !== undefined;
-  if (wait && !id) throw new Error(`wait needs a target: set ${group}-id, ${group}-name or --${kind} in args`);
-  const before = new Set(wait ? (await api.deployments(group, id!)).map((d) => d.deploymentId) : []);
-
-  const res = spawnSync(process.execPath, [join(import.meta.dirname, "cli", "cli.mjs"), ...argv, "--json"], {
+function runCli(cmd: Command, url: string, key: string, headers: Record<string, string>): string {
+  const res = spawnSync(process.execPath, [join(import.meta.dirname, "cli", "cli.mjs"), ...cmd.argv(), "--json"], {
     cwd: mkdtempSync(join(tmpdir(), "dokploy-")), // the CLI reads ./.env, never the user's workspace
     env: { ...process.env, DOKPLOY_URL: url, DOKPLOY_API_KEY: key, DOKPLOY_EXTRA_HEADERS: JSON.stringify(headers) },
     encoding: "utf8",
@@ -82,30 +24,55 @@ async function main() {
     stdio: ["ignore", "pipe", "inherit"],
   });
   if (res.error) throw res.error;
-  if (res.status !== 0) throw new Error(`dokploy ${command.join(" ")} exited with ${res.status}`);
+  if (res.status !== 0) throw new Error(`dokploy ${cmd.path.join(" ")} exited with ${res.status}`);
   const stdout = res.stdout.trim();
-  if (/^"?</.test(stdout)) {
-    throw new Error("got an HTML page instead of JSON: an auth proxy (e.g. Cloudflare Access) blocked the request; pass its headers via `headers`");
+  if (DokployApi.isHtml(stdout)) throw new Error(DokployApi.AUTH_PROXY_HINT);
+  return stdout;
+}
+
+async function main() {
+  const url = core.getInput("url", { required: true }).replace(/\/+$/, "");
+  const key = core.getInput("api-key", { required: true });
+  core.setSecret(key);
+  const headers = Command.parseObject("headers", core.getInput("headers")) as Record<string, string>;
+  for (const v of Object.values(headers)) if (v) core.setSecret(String(v));
+
+  let cmd = new Command(core.getInput("command", { required: true }), Command.parseObject("args", core.getInput("args")));
+  const api = new DokployApi(url, key, headers);
+
+  if (cmd.idField && !cmd.id) {
+    const id = core.getInput(`${cmd.group}-id`);
+    const name = core.getInput(`${cmd.group}-name`);
+    const scope = { projectId: core.getInput("project-id"), environmentId: core.getInput("environment-id") };
+    if (id || name) cmd = cmd.withId(id || (await api.findId(cmd.group, cmd.idField, name, scope)));
   }
-  output("result", stdout);
+
+  const wait = cmd.isDeploy && core.getBooleanInput("wait");
+  if (wait && !cmd.id) throw new Error(`wait needs a target: set ${cmd.group}-id, ${cmd.group}-name or ${cmd.idField} in args`);
+  const timeoutSeconds = wait ? seconds("wait-timeout") : 0;
+  const intervalSeconds = wait ? seconds("poll-interval") : 0;
+  const since = new Set(wait ? (await api.deployments(cmd.group, cmd.id!)).map((d) => d.deploymentId) : []);
+
+  const stdout = runCli(cmd, url, key, headers);
+  core.setOutput("result", stdout);
   try {
-    console.log(JSON.stringify(redact(JSON.parse(stdout)), null, 2));
+    console.log(JSON.stringify(Redact.json(JSON.parse(stdout)), null, 2));
   } catch {
-    console.log(`dokploy ${command.join(" ")}: ok`);
+    console.log(`dokploy ${cmd.path.join(" ")}: ok`);
   }
 
   if (!wait) return;
-  const d: Deployment = await waitFor(api, group, id!, before, Number(input("wait-timeout") || 600), Number(input("poll-interval") || 5));
-  output("deployment-id", d.deploymentId);
-  output("status", d.status);
+  const d = await api.waitForDeployment(cmd.group, cmd.id!, { since, timeoutSeconds, intervalSeconds }, (e) =>
+    core.warning(`status check failed, retrying: ${message(e)}`),
+  );
+  core.setOutput("deployment-id", d.deploymentId);
+  core.setOutput("status", d.status);
   console.log(`deployment ${d.deploymentId}: ${d.status}`);
   if (d.status !== "done") {
-    console.log(`::group::deployment log\n${await api.logs(d.deploymentId).catch(message)}\n::endgroup::`);
+    const log = await api.logs(d.deploymentId).catch(message);
+    await core.group("deployment log", async () => console.log(log));
     throw new Error(`deployment ${d.status}: ${d.errorMessage ?? "see the deployment log"}`);
   }
 }
 
-main().catch((e) => {
-  console.log(`::error::${message(e)}`);
-  process.exitCode = 1;
-});
+main().catch((e) => core.setFailed(message(e)));
