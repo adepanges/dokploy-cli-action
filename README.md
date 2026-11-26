@@ -111,7 +111,7 @@ npm ci
 npm run typecheck && npm test && npm run build
 ```
 
-Releases: run the **Release** workflow on `main` with a version; it builds `dist/`, tags `vX.Y.Z` and
+Releases: run the **Release** workflow (it builds `master`) with a version; it builds `dist/`, tags `vX.Y.Z` and
 moves `vX`.
 
 ## License
