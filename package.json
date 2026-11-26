@@ -4,8 +4,21 @@
   "private": true,
   "description": "GitHub Action wrapping the official Dokploy CLI. The pinned @dokploy/cli version is what the action runs; Dependabot bumps it.",
   "license": "MIT",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@dokploy/cli": "0.30.7"
-  }
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.11",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --allowImportingTsExtensions --module nodenext --target es2023 --strict --erasableSyntaxOnly --skipLibCheck --types node src/*.ts test/*.ts",
+    "test": "node --test test/*.test.ts",
+    "build": "node scripts/build.mjs"
+  },
+  "type": "module"
 }

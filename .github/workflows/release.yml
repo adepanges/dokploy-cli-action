@@ -1,0 +1,50 @@
+name: Release
+# dist/ is never committed to a branch: each release tag is a commit that adds it, so a
+# Dependabot bump of @dokploy/cli ships as soon as it is merged and released.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without the v, e.g. 1.2.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - name: Check version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::version must be X.Y.Z"; exit 1; }
+          git fetch --tags
+          ! git rev-parse -q --verify "refs/tags/v$VERSION" || { echo "::error::v$VERSION exists"; exit 1; }
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Tag a commit with dist/ and move the major tag
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --detach
+          git add -f dist
+          git commit -m "release v$VERSION"
+          git tag "v$VERSION"
+          git tag -f "v${VERSION%%.*}"
+          git push origin "v$VERSION"
+          git push -f origin "v${VERSION%%.*}"
+          gh release create "v$VERSION" --generate-notes --title "v$VERSION"
