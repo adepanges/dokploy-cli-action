@@ -1,0 +1,90 @@
+name: Release build
+# Builds, attests and uploads dist/ for the head of a release branch, then sets the commit status
+# `release-build` that master's ruleset requires before a release PR can merge. Prepare release calls
+# it (its own pushes, made with GITHUB_TOKEN, trigger nothing); later pushes to the branch trigger it.
+on:
+  push:
+    branches: ["release/v*"]
+  workflow_call:
+    inputs:
+      ref:
+        description: Release branch to build
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  id-token: write # build provenance and SBOM attestations
+  attestations: write
+  statuses: write
+
+concurrency:
+  group: release-build-${{ inputs.ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          persist-credentials: false
+      - name: Commit and pending status
+        id: head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          SHA=$(git rev-parse HEAD)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=pending -f context=release-build \
+            -f target_url="$RUN_URL" -f description="building dist/" >/dev/null
+      - name: Dependency review since the last release
+        uses: actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5.0.1
+        with:
+          base-ref: master
+          head-ref: ${{ steps.head.outputs.sha }}
+          fail-on-severity: moderate
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Bundled CLI runs and matches package.json
+        run: test "$(node dist/cli/cli.mjs --version)" = "$(node -p "require('@dokploy/cli/package.json').version")"
+      - name: Stage dist/ and the SBOM of the bundled (non-dev) dependencies
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          cp -r dist "$RUNNER_TEMP/release/"
+          npm sbom --sbom-format spdx --omit dev > "$RUNNER_TEMP/release/dokploy-cli-action.spdx.json"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/index.js
+            dist/cli/cli.mjs
+      - uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: |
+            dist/index.js
+            dist/cli/cli.mjs
+          sbom-path: ${{ runner.temp }}/release/dokploy-cli-action.spdx.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ steps.head.outputs.sha }}
+          path: ${{ runner.temp }}/release
+          retention-days: 30
+          if-no-files-found: error
+      - name: Final status
+        if: always() && steps.head.outputs.sha
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.head.outputs.sha }}
+          STATE: ${{ job.status == 'success' && 'success' || 'failure' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state="$STATE" -f context=release-build \
+            -f target_url="$RUN_URL" -f description="dist/ $STATE" >/dev/null
