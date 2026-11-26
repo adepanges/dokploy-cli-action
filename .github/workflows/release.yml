@@ -9,6 +9,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write # build provenance and SBOM attestations
+  attestations: write
 
 jobs:
   release:
@@ -45,6 +47,19 @@ jobs:
       - run: npm run build
       - name: Bundled CLI runs and matches package.json
         run: test "$(node dist/cli/cli.mjs --version)" = "$(node -p "require('@dokploy/cli/package.json').version")"
+      - name: SBOM of the bundled (non-dev) dependencies
+        run: npm sbom --sbom-format spdx --omit dev > "$RUNNER_TEMP/dokploy-cli-action.spdx.json"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/index.js
+            dist/cli/cli.mjs
+      - uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: |
+            dist/index.js
+            dist/cli/cli.mjs
+          sbom-path: ${{ runner.temp }}/dokploy-cli-action.spdx.json
       - name: Tag, release, delete the branch
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -65,7 +80,7 @@ jobs:
           git push "$REMOTE" "v$VERSION"
           git push -f "$REMOTE" "$FLOAT"
           printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
-          gh release create "v$VERSION" --title "v$VERSION" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag
+          gh release create "v$VERSION" "$RUNNER_TEMP/dokploy-cli-action.spdx.json" --title "v$VERSION" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag
           git push "$REMOTE" --delete "$BRANCH"
       - name: Merge master back into develop
         env:
