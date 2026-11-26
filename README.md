@@ -18,7 +18,7 @@ Actions, and optionally wait until a deployment has finished.
 ## Usage
 
 ```yaml
-- uses: adepanges/dokploy-cli-action@v0.30.7
+- uses: adepanges/dokploy-cli-action@v0.0
   with:
     url: https://dokploy.example.com
     api-key: ${{ secrets.DOKPLOY_API_KEY }}
@@ -26,17 +26,16 @@ Actions, and optionally wait until a deployment has finished.
     id: abc123
 ```
 
-Always use a release tag: branches do not contain the built `dist/`. Versions follow the bundled CLI
-plus a build number:
+Always use a release tag: branches do not contain the built `dist/`. The action has its own
+[semver](https://semver.org) version; each release names the `@dokploy/cli` version it bundles.
 
 | Tag | Moves? | Means |
 | --- | --- | --- |
-| `v0.30.7-2` | no | CLI 0.30.7, second build of the action for it |
-| `v0.30.7` | yes | latest build for CLI 0.30.7 |
-| `v0` | yes | latest build for any CLI 0.x (follows the CLI's own breaking changes) |
+| `v0.1.2` | no | one exact release |
+| `v0.1` | yes | latest `0.1.x` (while in 0.x, a minor release may change inputs) |
+| `v1` | yes | latest `1.x.x`, from 1.0.0 on |
 
-Builds for the same CLI version never rename or remove inputs or outputs, so `v0.30.7` is safe to
-follow.
+A major release (a minor one while in 0.x) is the only kind that renames or removes inputs or outputs.
 
 ### Trigger and forget
 
@@ -137,8 +136,13 @@ npm ci
 npm run typecheck && npm test && npm run build
 ```
 
-Releases: run the **Release** workflow (it builds `master`). It builds `dist/`, tags
-`v<cli>-<build>` (the next build number for the bundled CLI version) and moves `v<cli>` and `v<major>`.
+Releases:
+
+1. Run **Prepare release** on `develop` and pick `patch`, `minor` or `major` (the first release is
+   `v0.0.1`). It pushes `release/vX.Y.Z` and opens a PR to `master` whose body is the changeset; edit it
+   if needed, it becomes the release notes.
+2. Merge the PR. **Release** builds `dist/` into a tag commit, tags `vX.Y.Z`, moves `v0.<minor>` (or
+   `v<major>` from 1.0), publishes the GitHub release with the changeset and deletes the release branch.
 
 ## License
 

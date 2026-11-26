@@ -1,20 +1,38 @@
 name: Release
-# dist/ is never committed to a branch: each release tag is a commit that adds it, so a
-# Dependabot bump of @dokploy/cli ships as soon as it is merged and released.
-# Version = bundled CLI version + build number: v0.30.7-1, v0.30.7-2, … then v0.30.8-1.
+# Runs when a release/vX.Y.Z PR is merged into master: builds dist/ into a tag commit (dist/ is never
+# committed to a branch), tags vX.Y.Z, moves the floating tag, publishes a GitHub release whose notes
+# are the PR body (the changeset), and deletes the release branch.
 on:
-  workflow_dispatch:
+  pull_request:
+    types: [closed]
+    branches: [master]
 
 permissions:
   contents: write
 
 jobs:
   release:
+    if: >-
+      github.event.pull_request.merged &&
+      startsWith(github.event.pull_request.head.ref, 'release/v') &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
+      - name: Version from the branch
+        id: version
+        env:
+          REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          VERSION="${REF#release/v}"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::bad release branch $REF"; exit 1; }
+          IFS=. read -r MA MI _ <<< "$VERSION"
+          # 0.x: minors may break, so the floating tag is v0.<minor>; from 1.0 it is v<major>
+          [ "$MA" = 0 ] && FLOAT="v0.$MI" || FLOAT="v$MA"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "float=$FLOAT" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: master
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
           persist-credentials: false # dependency scripts must not find a write token
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -26,30 +44,26 @@ jobs:
       - run: npm run build
       - name: Bundled CLI runs and matches package.json
         run: test "$(node dist/cli/cli.mjs --version)" = "$(node -p "require('@dokploy/cli/package.json').version")"
-      - name: Next version
-        id: version
-        run: |
-          git fetch --tags
-          CLI=$(node -p "require('@dokploy/cli/package.json').version")
-          LAST=$(git tag -l "v$CLI-*" | sed "s/^v$CLI-//" | { grep -E '^[0-9]+$' || true; } | sort -n | tail -1)
-          echo "cli=$CLI" >> "$GITHUB_OUTPUT"
-          echo "version=$CLI-$(( ${LAST:-0} + 1 ))" >> "$GITHUB_OUTPUT"
-      - name: Tag a commit with dist/ and move v<cli> and v<major>
+      - name: Tag, release, delete the branch
         env:
           VERSION: ${{ steps.version.outputs.version }}
-          CLI: ${{ steps.version.outputs.cli }}
+          FLOAT: ${{ steps.version.outputs.float }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          NOTES: ${{ github.event.pull_request.body }}
           GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git ls-remote --exit-code --tags "$REMOTE" "refs/tags/v$VERSION" >/dev/null && { echo "::error::v$VERSION exists"; exit 1; }
           git switch --detach
           npm pkg set version="$VERSION"
           git add -f dist package.json
           git commit -m "release v$VERSION"
           git tag "v$VERSION"
-          git tag -f "v$CLI"
-          git tag -f "v${CLI%%.*}"
-          REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git tag -f "$FLOAT"
           git push "$REMOTE" "v$VERSION"
-          git push -f "$REMOTE" "v$CLI" "v${CLI%%.*}"
-          gh release create "v$VERSION" --generate-notes --title "v$VERSION (@dokploy/cli $CLI)"
+          git push -f "$REMOTE" "$FLOAT"
+          printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
+          gh release create "v$VERSION" --title "v$VERSION" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag
+          git push "$REMOTE" --delete "$BRANCH"
