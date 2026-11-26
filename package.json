@@ -1,6 +1,5 @@
 {
   "name": "dokploy-cli-action",
-  "version": "0.0.0",
   "private": true,
   "description": "GitHub Action wrapping the official Dokploy CLI. The pinned @dokploy/cli version is what the action runs; Dependabot bumps it.",
   "license": "MIT",
