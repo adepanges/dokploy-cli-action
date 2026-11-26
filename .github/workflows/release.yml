@@ -1,6 +1,7 @@
 name: Release
-# Runs when a release/vX.Y.Z PR is merged into master: builds dist/ into a tag commit (dist/ is never
-# committed to a branch), tags vX.Y.Z, moves the floating tag, publishes a GitHub release whose notes
+# Runs when a release/vX.Y.Z PR is merged into master. It installs and builds nothing: it takes the
+# dist/ that release-build.yml built and attested for the PR's head commit, puts it in a tag commit
+# (dist/ is never committed to a branch), tags vX.Y.Z, moves the floating tag, publishes a GitHub release whose notes
 # are the PR body (the changeset), deletes the release branch and merges master back into develop.
 on:
   pull_request:
@@ -8,7 +9,7 @@ on:
     branches: [master]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   release:
@@ -17,6 +18,10 @@ jobs:
       startsWith(github.event.pull_request.head.ref, 'release/v') &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # tags, the GitHub release, the back-merge into develop
+      actions: read # the release build's artifact
+      attestations: read
     steps:
       - name: Version from the branch
         id: version
@@ -32,19 +37,34 @@ jobs:
           echo "float=$FLOAT" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-          persist-credentials: false # dependency scripts must not find a write token
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+          persist-credentials: false
+      - name: Find the release build of the PR head
+        id: build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=release-$SHA" \
+            --jq '[.artifacts[] | select(.expired | not)][0].workflow_run.id // empty')
+          [ -n "$RUN" ] || { echo "::error::no release build for $SHA: re-run Release build on the branch, or Prepare release"; exit 1; }
+          echo "run=$RUN" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          node-version: 26
-          cache: npm
-      - run: npm ci --ignore-scripts
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
-      - name: Bundled CLI runs and matches package.json
-        run: test "$(node dist/cli/cli.mjs --version)" = "$(node -p "require('@dokploy/cli/package.json').version")"
+          name: release-${{ github.event.pull_request.head.sha }}
+          run-id: ${{ steps.build.outputs.run }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/release
+      - name: Verify the attestations, then use that dist/
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for f in dist/index.js dist/cli/cli.mjs; do
+            gh attestation verify "$RUNNER_TEMP/release/$f" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-build.yml"
+          done
+          rm -rf dist && cp -r "$RUNNER_TEMP/release/dist" dist
       - name: Tag, release, delete the branch
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -65,7 +85,7 @@ jobs:
           git push "$REMOTE" "v$VERSION"
           git push -f "$REMOTE" "$FLOAT"
           printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
-          gh release create "v$VERSION" --title "v$VERSION" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag
+          gh release create "v$VERSION" "$RUNNER_TEMP"/release/dokploy-cli-action.* --title "v$VERSION" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag
           git push "$REMOTE" --delete "$BRANCH"
       - name: Merge master back into develop
         env:

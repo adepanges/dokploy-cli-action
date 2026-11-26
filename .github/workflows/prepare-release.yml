@@ -1,7 +1,8 @@
 name: Prepare release
 # Opens release/vX.Y.Z from develop (one commit: the package.json version) as a PR to master, with
 # the changeset in its body.
-# Merging that PR runs release.yml. The first release is v0.0.1.
+# release-build.yml then builds and attests dist/ for it. Merging the PR runs release.yml.
+# The first release is v0.0.1.
 on:
   workflow_dispatch:
     inputs:
@@ -11,14 +12,17 @@ on:
         options: [patch, minor, major]
         default: patch
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   prepare:
     if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      branch: ${{ steps.pr.outputs.branch }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -48,6 +52,7 @@ jobs:
           printf '## Changeset v%s\n\nBundles `@dokploy/cli` %s.\n\n%s\n' "$VERSION" "$CLI" "$CHANGES" > "$RUNNER_TEMP/changeset.md"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Open the release PR
+        id: pr
         env:
           VERSION: ${{ steps.version.outputs.version }}
           GH_TOKEN: ${{ github.token }}
@@ -59,4 +64,16 @@ jobs:
           npm version "$VERSION" --no-git-tag-version --ignore-scripts --allow-same-version
           git diff --quiet || git commit -am "chore: release v$VERSION"
           git push origin "$BRANCH"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
           gh pr create --base master --head "$BRANCH" --title "Release v$VERSION" --body-file "$RUNNER_TEMP/changeset.md"
+
+  build:
+    needs: prepare
+    uses: ./.github/workflows/release-build.yml
+    with:
+      ref: ${{ needs.prepare.outputs.branch }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      statuses: write
