@@ -4,6 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/adepanges/dokploy-cli-action)](https://github.com/adepanges/dokploy-cli-action/releases/latest)
 [![Bundled CLI](https://img.shields.io/github/package-json/dependency-version/adepanges/dokploy-cli-action/@dokploy/cli?branch=master)](https://www.npmjs.com/package/@dokploy/cli)
 [![CI](https://github.com/adepanges/dokploy-cli-action/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/adepanges/dokploy-cli-action/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/adepanges/dokploy-cli-action/badge)](https://scorecard.dev/viewer/?uri=github.com/adepanges/dokploy-cli-action)
 [![License: MIT](https://img.shields.io/github/license/adepanges/dokploy-cli-action)](LICENSE)
 
 Run any command of the official [`@dokploy/cli`](https://www.npmjs.com/package/@dokploy/cli) from GitHub
@@ -138,7 +139,8 @@ print its last 200 log lines in a collapsed group.
 ## Verifying a release
 
 Each release's `dist/` is built by the Release workflow, with a build provenance attestation and an
-SPDX SBOM of its bundled dependencies (also attached to the GitHub release):
+SPDX SBOM of its bundled dependencies. The SBOM and both signed attestation bundles
+(`*.intoto.jsonl`) are also attached to the GitHub release:
 
 ```bash
 git clone --depth 1 --branch v0.0.2 https://github.com/adepanges/dokploy-cli-action

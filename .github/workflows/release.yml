@@ -9,9 +9,7 @@ on:
     branches: [master]
 
 permissions:
-  contents: write
-  actions: read # the release build's artifact
-  attestations: read
+  contents: read
 
 jobs:
   release:
@@ -20,6 +18,10 @@ jobs:
       startsWith(github.event.pull_request.head.ref, 'release/v') &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # tags, the GitHub release, the back-merge into develop
+      actions: read # the release build's artifact
+      attestations: read
     steps:
       - name: Version from the branch
         id: version
@@ -83,7 +85,7 @@ jobs:
           git push "$REMOTE" "v$VERSION"
           git push -f "$REMOTE" "$FLOAT"
           printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
-          gh release create "v$VERSION" "$RUNNER_TEMP/release/dokploy-cli-action.spdx.json" --title "v$VERSION" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag
+          gh release create "v$VERSION" "$RUNNER_TEMP"/release/dokploy-cli-action.* --title "v$VERSION" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag
           git push "$REMOTE" --delete "$BRANCH"
       - name: Merge master back into develop
         env:
