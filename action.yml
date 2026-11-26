@@ -1,0 +1,25 @@
+name: Dokploy CLI
+description: Run any command of the official @dokploy/cli, and optionally wait for the deployment to finish. Unofficial.
+author: adepanges
+branding: { icon: upload-cloud, color: blue }
+inputs:
+  url: { description: "Dokploy server base URL (without /api), e.g. https://dokploy.example.com", required: true }
+  api-key: { description: "Dokploy API key", required: true }
+  command: { description: "CLI command path, e.g. `compose deploy`, `application redeploy`, `project all`", required: true }
+  args: { description: "Flags for the command as a JSON or YAML object, e.g. {\"title\":\"x\",\"freshVolumes\":true}; true adds a bare flag, false/null drops it", required: false, default: "" }
+  id: { description: "Target id, passed as --<group>Id (compose deploy -> --composeId, postgres stop -> --postgresId)", required: false, default: "" }
+  name: { description: "Target by exact name instead of id, via <group>.search (compose, application, postgres, mysql, mariadb, mongo, redis, project, environment)", required: false, default: "" }
+  project-id: { description: "Name lookup only: narrows `name` to one project (not passed to the command)", required: false, default: "" }
+  environment-id: { description: "Name lookup only: narrows `name` to one environment (not passed to the command)", required: false, default: "" }
+  wait: { description: "For compose/application deploy and redeploy: wait until the deployment is done or failed (false = trigger and forget)", required: false, default: "true" }
+  print-logs: { description: "When a waited-for deployment fails, print its last 200 log lines (may contain env values the build echoes)", required: false, default: "false" }
+  wait-timeout: { description: "Seconds to wait before failing", required: false, default: "600" }
+  poll-interval: { description: "Seconds between status checks", required: false, default: "5" }
+  headers: { description: "JSON or YAML object of extra HTTP headers for every request, e.g. Cloudflare Access service-token headers", required: false, default: "" }
+outputs:
+  result: { description: "Raw JSON printed by the CLI command (may contain secrets; the job log only shows env names)" }
+  deployment-id: { description: "Id of the deployment this run waited for (wait=true)" }
+  deployment-status: { description: "Final deployment status: done, error or cancelled (wait=true)" }
+runs:
+  using: node24
+  main: dist/index.js

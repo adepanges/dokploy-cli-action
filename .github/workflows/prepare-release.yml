@@ -1,0 +1,62 @@
+name: Prepare release
+# Opens release/vX.Y.Z from develop (one commit: the package.json version) as a PR to master, with
+# the changeset in its body.
+# Merging that PR runs release.yml. The first release is v0.0.1.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Which part of the version to bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+          fetch-depth: 0
+      - name: Next version and changeset
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          LAST=$(git tag -l 'v*.*.*' --sort=-v:refname | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } | head -1)
+          if [ -z "$LAST" ]; then
+            VERSION=0.0.1
+            RANGE=HEAD
+          else
+            IFS=. read -r MA MI PA <<< "${LAST#v}"
+            case "$BUMP" in
+              major) VERSION="$((MA + 1)).0.0" ;;
+              minor) VERSION="$MA.$((MI + 1)).0" ;;
+              *) VERSION="$MA.$MI.$((PA + 1))" ;;
+            esac
+            RANGE="$LAST..HEAD"
+          fi
+          CLI=$(node -p "require('./package-lock.json').packages['node_modules/@dokploy/cli'].version")
+          CHANGES=$(git log "$RANGE" --no-merges --pretty='- %s (%h)')
+          [ -n "$CHANGES" ] || { echo "::error::no commits since $LAST"; exit 1; }
+          printf '## Changeset v%s\n\nBundles `@dokploy/cli` %s.\n\n%s\n' "$VERSION" "$CLI" "$CHANGES" > "$RUNNER_TEMP/changeset.md"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Open the release PR
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BRANCH="release/v$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          npm version "$VERSION" --no-git-tag-version --ignore-scripts
+          git commit -am "chore: release v$VERSION"
+          git push origin "$BRANCH"
+          gh pr create --base master --head "$BRANCH" --title "Release v$VERSION" --body-file "$RUNNER_TEMP/changeset.md"
