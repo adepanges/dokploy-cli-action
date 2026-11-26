@@ -139,10 +139,11 @@ npm run typecheck && npm test && npm run build
 Releases:
 
 1. Run **Prepare release** on `develop` and pick `patch`, `minor` or `major` (the first release is
-   `v0.0.1`). It pushes `release/vX.Y.Z` and opens a PR to `master` whose body is the changeset; edit it
+   `v0.0.1`). It pushes `release/vX.Y.Z` (one commit setting the `package.json` version) and opens a PR to `master` whose body is the changeset; edit it
    if needed, it becomes the release notes.
 2. Merge the PR. **Release** builds `dist/` into a tag commit, tags `vX.Y.Z`, moves `v0.<minor>` (or
-   `v<major>` from 1.0), publishes the GitHub release with the changeset and deletes the release branch.
+   `v<major>` from 1.0), publishes the GitHub release with the changeset, deletes the release branch and merges `master`
+   back into `develop`.
 
 ## License
 

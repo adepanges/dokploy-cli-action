@@ -1,5 +1,6 @@
 name: Prepare release
-# Opens release/vX.Y.Z from develop as a PR to master, with the changeset in its body.
+# Opens release/vX.Y.Z from develop (one commit: the package.json version) as a PR to master, with
+# the changeset in its body.
 # Merging that PR runs release.yml. The first release is v0.0.1.
 on:
   workflow_dispatch:
@@ -52,5 +53,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           BRANCH="release/v$VERSION"
-          git push origin "HEAD:refs/heads/$BRANCH"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          npm version "$VERSION" --no-git-tag-version --ignore-scripts
+          git commit -am "chore: release v$VERSION"
+          git push origin "$BRANCH"
           gh pr create --base master --head "$BRANCH" --title "Release v$VERSION" --body-file "$RUNNER_TEMP/changeset.md"
