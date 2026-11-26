@@ -1,7 +1,7 @@
 name: Release
 # dist/ is never committed to a branch: each release tag is a commit that adds it, so a
 # Dependabot bump of @dokploy/cli ships as soon as it is merged and released.
-# Version = bundled CLI version + build number: v0.30.7.1, v0.30.7.2, … then v0.30.8.1.
+# Version = bundled CLI version + build number: v0.30.7-1, v0.30.7-2, … then v0.30.8-1.
 on:
   workflow_dispatch:
 
@@ -31,9 +31,9 @@ jobs:
         run: |
           git fetch --tags
           CLI=$(node -p "require('@dokploy/cli/package.json').version")
-          LAST=$(git tag -l "v$CLI.*" | sed "s/^v$CLI\.//" | { grep -E '^[0-9]+$' || true; } | sort -n | tail -1)
+          LAST=$(git tag -l "v$CLI-*" | sed "s/^v$CLI-//" | { grep -E '^[0-9]+$' || true; } | sort -n | tail -1)
           echo "cli=$CLI" >> "$GITHUB_OUTPUT"
-          echo "version=$CLI.$(( ${LAST:-0} + 1 ))" >> "$GITHUB_OUTPUT"
+          echo "version=$CLI-$(( ${LAST:-0} + 1 ))" >> "$GITHUB_OUTPUT"
       - name: Tag a commit with dist/ and move v<cli> and v<major>
         env:
           VERSION: ${{ steps.version.outputs.version }}

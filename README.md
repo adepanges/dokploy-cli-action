@@ -31,7 +31,7 @@ plus a build number:
 
 | Tag | Moves? | Means |
 | --- | --- | --- |
-| `v0.30.7.2` | no | CLI 0.30.7, second build of the action for it |
+| `v0.30.7-2` | no | CLI 0.30.7, second build of the action for it |
 | `v0.30.7` | yes | latest build for CLI 0.30.7 |
 | `v0` | yes | latest build for any CLI 0.x (follows the CLI's own breaking changes) |
 
@@ -138,7 +138,7 @@ npm run typecheck && npm test && npm run build
 ```
 
 Releases: run the **Release** workflow (it builds `master`). It builds `dist/`, tags
-`v<cli>.<build>` (the next build number for the bundled CLI version) and moves `v<cli>` and `v<major>`.
+`v<cli>-<build>` (the next build number for the bundled CLI version) and moves `v<cli>` and `v<major>`.
 
 ## License
 
