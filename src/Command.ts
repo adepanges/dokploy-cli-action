@@ -1,19 +1,21 @@
 import { parse } from "yaml";
 
-const ID_FIELDS: Record<string, string> = { compose: "composeId", application: "applicationId" };
+// deployment.allByType only tracks these, so only their deploys can be waited for
+const WAITABLE = new Set(["compose", "application"]);
 
 export class Command {
   readonly path: string[];
   readonly group: string;
-  readonly idField: string | undefined;
+  readonly idField: string;
   readonly isDeploy: boolean;
   private readonly args: Record<string, unknown>;
 
   constructor(command: string, args: Record<string, unknown>) {
     this.path = command.split(/\s+/).filter(Boolean);
     this.group = this.path[0] ?? "";
-    this.idField = ID_FIELDS[this.group];
-    this.isDeploy = this.idField !== undefined && ["deploy", "redeploy"].includes(this.path[1]);
+    // preview-deployment -> previewDeploymentId, the CLI's flag for that group's id
+    this.idField = `${this.group.replace(/-(\w)/g, (_, c: string) => c.toUpperCase())}Id`;
+    this.isDeploy = WAITABLE.has(this.group) && ["deploy", "redeploy"].includes(this.path[1]);
     this.args = args;
   }
 
@@ -31,12 +33,12 @@ export class Command {
   }
 
   get id(): string | undefined {
-    const v = this.idField && this.args[this.idField];
+    const v = this.args[this.idField];
     return v ? String(v) : undefined;
   }
 
   withId(id: string): Command {
-    return new Command(this.path.join(" "), { ...this.args, [this.idField!]: id });
+    return new Command(this.path.join(" "), { ...this.args, [this.idField]: id });
   }
 
   // true adds a bare flag, false/null drops it

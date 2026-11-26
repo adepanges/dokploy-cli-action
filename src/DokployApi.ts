@@ -49,7 +49,7 @@ export class DokployApi {
     if (hits.length === 1) return hits[0][idField];
     if (!hits.length) throw new Error(`no ${group} named "${name}"`);
     const list = hits.map((h) => `${h[idField]} (environmentId ${h.environmentId})`).join(", ");
-    throw new Error(`${group}-name "${name}" is ambiguous, add project-id or environment-id: ${list}`);
+    throw new Error(`name "${name}" is ambiguous, add project-id or environment-id: ${list}`);
   }
 
   // The deployment waited for is the first one not in `since` (ids that existed before the trigger).

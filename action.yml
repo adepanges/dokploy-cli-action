@@ -3,24 +3,22 @@ description: Run any command of the official @dokploy/cli, and optionally wait f
 author: adepanges
 branding: { icon: upload-cloud, color: blue }
 inputs:
-  url: { description: "Dokploy server URL, e.g. https://dokploy.example.com", required: true }
+  url: { description: "Dokploy server base URL (without /api), e.g. https://dokploy.example.com", required: true }
   api-key: { description: "Dokploy API key", required: true }
   command: { description: "CLI command path, e.g. `compose deploy`, `application redeploy`, `project all`", required: true }
   args: { description: "Flags for the command as a JSON or YAML object, e.g. {\"title\":\"x\",\"freshVolumes\":true}; true adds a bare flag, false/null drops it", required: false, default: "" }
-  compose-id: { description: "Target compose id (adds --composeId)", required: false, default: "" }
-  compose-name: { description: "Target compose by exact name (use project-id/environment-id if the name is not unique)", required: false, default: "" }
-  application-id: { description: "Target application id (adds --applicationId)", required: false, default: "" }
-  application-name: { description: "Target application by exact name", required: false, default: "" }
-  project-id: { description: "Narrows a *-name lookup", required: false, default: "" }
-  environment-id: { description: "Narrows a *-name lookup", required: false, default: "" }
-  wait: { description: "For deploy/redeploy: wait until the deployment is done or failed (false = trigger and forget)", required: false, default: "true" }
+  id: { description: "Target id, passed as --<group>Id (compose deploy -> --composeId, postgres stop -> --postgresId)", required: false, default: "" }
+  name: { description: "Target by exact name instead of id, via <group>.search (compose, application, postgres, mysql, mariadb, mongo, redis, project, environment)", required: false, default: "" }
+  project-id: { description: "Name lookup only: narrows `name` to one project (not passed to the command)", required: false, default: "" }
+  environment-id: { description: "Name lookup only: narrows `name` to one environment (not passed to the command)", required: false, default: "" }
+  wait: { description: "For compose/application deploy and redeploy: wait until the deployment is done or failed (false = trigger and forget)", required: false, default: "true" }
   wait-timeout: { description: "Seconds to wait before failing", required: false, default: "600" }
   poll-interval: { description: "Seconds between status checks", required: false, default: "5" }
-  headers: { description: "JSON object of extra HTTP headers for every request, e.g. Cloudflare Access service-token headers", required: false, default: "" }
+  headers: { description: "JSON or YAML object of extra HTTP headers for every request, e.g. Cloudflare Access service-token headers", required: false, default: "" }
 outputs:
   result: { description: "Raw JSON printed by the CLI command" }
   deployment-id: { description: "Id of the deployment this run waited for (wait=true)" }
-  status: { description: "Final deployment status: done, error or cancelled (wait=true)" }
+  deployment-status: { description: "Final deployment status: done, error or cancelled (wait=true)" }
 runs:
   using: node24
   main: dist/index.js

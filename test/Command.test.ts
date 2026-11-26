@@ -18,5 +18,6 @@ test("argv, deploy detection and target id", () => {
   assert.equal(new Command("application deploy", { applicationId: "a1" }).id, "a1");
   assert.equal(new Command("compose stop", {}).isDeploy, false);
   assert.equal(new Command("postgres deploy", {}).isDeploy, false);
-  assert.equal(new Command("project all", {}).idField, undefined);
+  assert.equal(new Command("postgres stop", {}).idField, "postgresId");
+  assert.equal(new Command("preview-deployment redeploy", {}).idField, "previewDeploymentId");
 });

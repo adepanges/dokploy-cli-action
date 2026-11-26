@@ -31,7 +31,7 @@ function runCli(cmd: Command, url: string, key: string, headers: Record<string, 
 }
 
 async function main() {
-  const url = core.getInput("url", { required: true }).replace(/\/+$/, "");
+  const url = core.getInput("url", { required: true }).replace(/\/+$/, "").replace(/\/api$/, "");
   const key = core.getInput("api-key", { required: true });
   core.setSecret(key);
   const headers = Command.parseObject("headers", core.getInput("headers")) as Record<string, string>;
@@ -40,15 +40,17 @@ async function main() {
   let cmd = new Command(core.getInput("command", { required: true }), Command.parseObject("args", core.getInput("args")));
   const api = new DokployApi(url, key, headers);
 
-  if (cmd.idField && !cmd.id) {
-    const id = core.getInput(`${cmd.group}-id`);
-    const name = core.getInput(`${cmd.group}-name`);
+  const id = core.getInput("id");
+  const name = core.getInput("name");
+  if (id && name) throw new Error("set `id` or `name`, not both");
+  if ((id || name) && cmd.id) throw new Error(`set the target once: \`${id ? "id" : "name"}\` or ${cmd.idField} in args`);
+  if (id || name) {
     const scope = { projectId: core.getInput("project-id"), environmentId: core.getInput("environment-id") };
-    if (id || name) cmd = cmd.withId(id || (await api.findId(cmd.group, cmd.idField, name, scope)));
+    cmd = cmd.withId(id || (await api.findId(cmd.group, cmd.idField, name, scope)));
   }
 
   const wait = cmd.isDeploy && core.getBooleanInput("wait");
-  if (wait && !cmd.id) throw new Error(`wait needs a target: set ${cmd.group}-id, ${cmd.group}-name or ${cmd.idField} in args`);
+  if (wait && !cmd.id) throw new Error(`wait needs a target: set \`id\`, \`name\` or ${cmd.idField} in args`);
   const timeoutSeconds = wait ? seconds("wait-timeout") : 0;
   const intervalSeconds = wait ? seconds("poll-interval") : 0;
   const since = new Set(wait ? (await api.deployments(cmd.group, cmd.id!)).map((d) => d.deploymentId) : []);
@@ -66,7 +68,7 @@ async function main() {
     core.warning(`status check failed, retrying: ${message(e)}`),
   );
   core.setOutput("deployment-id", d.deploymentId);
-  core.setOutput("status", d.status);
+  core.setOutput("deployment-status", d.status);
   console.log(`deployment ${d.deploymentId}: ${d.status}`);
   if (d.status !== "done") {
     const log = await api.logs(d.deploymentId).catch(message);
