@@ -157,11 +157,16 @@ npm run typecheck && npm test && npm run build
 Releases:
 
 1. Run **Prepare release** on `develop` and pick `patch`, `minor` or `major` (the first release is
-   `v0.0.1`). It pushes `release/vX.Y.Z` (one commit setting the `package.json` version) and opens a PR to `master` whose body is the changeset; edit it
-   if needed, it becomes the release notes.
-2. Merge the PR. **Release** builds `dist/` into a tag commit, attests it (provenance and SBOM), tags `vX.Y.Z`, moves `v0.<minor>` (or
-   `v<major>` from 1.0), publishes the GitHub release with the changeset, deletes the release branch and merges `master`
-   back into `develop`.
+   `v0.0.1`). It pushes `release/vX.Y.Z` (one commit setting the `package.json` version), opens a PR to
+   `master` whose body is the changeset (edit it if needed: it becomes the release notes), and runs
+   **Release build**.
+2. **Release build** reviews dependency changes since `master`, tests, builds `dist/`, attests it
+   (provenance and SBOM), uploads it as an artifact named after the commit, and sets the commit status
+   `release-build`. It runs again on every push to the release branch, so extra commits there are fine.
+3. Merge the PR once `release-build` is green (a ruleset on `master` requires it). **Release** installs
+   and builds nothing: it downloads the artifact of the PR head, verifies its attestations, puts it in a
+   tag commit, tags `vX.Y.Z`, moves `v0.<minor>` (or `v<major>` from 1.0), publishes the GitHub release
+   with the changeset and the SBOM, deletes the release branch and merges `master` back into `develop`.
 
 ## License
 
