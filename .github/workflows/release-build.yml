@@ -14,9 +14,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write # build provenance and SBOM attestations
-  attestations: write
-  statuses: write
 
 concurrency:
   group: release-build-${{ inputs.ref || github.ref_name }}
@@ -25,6 +22,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # build provenance and SBOM attestations
+      attestations: write
+      statuses: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -62,18 +64,27 @@ jobs:
           cp -r dist "$RUNNER_TEMP/release/"
           npm sbom --sbom-format spdx --omit dev > "$RUNNER_TEMP/release/dokploy-cli-action.spdx.json"
       - name: Attest build provenance
+        id: provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: |
             dist/index.js
             dist/cli/cli.mjs
       - name: Attest the SBOM
+        id: sbom
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: |
             dist/index.js
             dist/cli/cli.mjs
           sbom-path: ${{ runner.temp }}/release/dokploy-cli-action.spdx.json
+      - name: Keep the signed attestation bundles for the release assets
+        env:
+          PROVENANCE: ${{ steps.provenance.outputs.bundle-path }}
+          SBOM: ${{ steps.sbom.outputs.bundle-path }}
+        run: |
+          cp "$PROVENANCE" "$RUNNER_TEMP/release/dokploy-cli-action.intoto.jsonl"
+          cp "$SBOM" "$RUNNER_TEMP/release/dokploy-cli-action.spdx.intoto.jsonl"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-${{ steps.head.outputs.sha }}
