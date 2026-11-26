@@ -1,12 +1,9 @@
 name: Release
 # dist/ is never committed to a branch: each release tag is a commit that adds it, so a
 # Dependabot bump of @dokploy/cli ships as soon as it is merged and released.
+# Version = bundled CLI version + build number: v0.30.7.1, v0.30.7.2, … then v0.30.8.1.
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Version without the v, e.g. 1.2.0"
-        required: true
 
 permissions:
   contents: write
@@ -18,13 +15,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: master
-      - name: Check version
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::version must be X.Y.Z"; exit 1; }
-          git fetch --tags
-          ! git rev-parse -q --verify "refs/tags/v$VERSION" || { echo "::error::v$VERSION exists"; exit 1; }
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -33,9 +23,18 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      - name: Tag a commit with dist/ and move the major tag
+      - name: Next version
+        id: version
+        run: |
+          git fetch --tags
+          CLI=$(node -p "require('@dokploy/cli/package.json').version")
+          LAST=$(git tag -l "v$CLI.*" | sed "s/^v$CLI\.//" | { grep -E '^[0-9]+$' || true; } | sort -n | tail -1)
+          echo "cli=$CLI" >> "$GITHUB_OUTPUT"
+          echo "version=$CLI.$(( ${LAST:-0} + 1 ))" >> "$GITHUB_OUTPUT"
+      - name: Tag a commit with dist/ and move v<cli> and v<major>
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
+          CLI: ${{ steps.version.outputs.cli }}
           GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "github-actions[bot]"
@@ -44,7 +43,8 @@ jobs:
           git add -f dist
           git commit -m "release v$VERSION"
           git tag "v$VERSION"
-          git tag -f "v${VERSION%%.*}"
+          git tag -f "v$CLI"
+          git tag -f "v${CLI%%.*}"
           git push origin "v$VERSION"
-          git push -f origin "v${VERSION%%.*}"
-          gh release create "v$VERSION" --generate-notes --title "v$VERSION"
+          git push -f origin "v$CLI" "v${CLI%%.*}"
+          gh release create "v$VERSION" --generate-notes --title "v$VERSION (@dokploy/cli $CLI)"

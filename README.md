@@ -17,7 +17,7 @@ Actions, and optionally wait until a deployment has finished.
 ## Usage
 
 ```yaml
-- uses: adepanges/dokploy-cli-action@v1
+- uses: adepanges/dokploy-cli-action@v0.30.7
   with:
     url: https://dokploy.example.com
     api-key: ${{ secrets.DOKPLOY_API_KEY }}
@@ -25,7 +25,14 @@ Actions, and optionally wait until a deployment has finished.
     compose-id: abc123
 ```
 
-Always use a release tag (`@v1`, `@v1.2.0`): branches do not contain the built `dist/`.
+Always use a release tag: branches do not contain the built `dist/`. Versions follow the bundled CLI
+plus a build number:
+
+| Tag | Moves? | Means |
+| --- | --- | --- |
+| `v0.30.7.2` | no | CLI 0.30.7, second build of the action for it |
+| `v0.30.7` | yes | latest build for CLI 0.30.7 |
+| `v0` | yes | latest build for any CLI 0.x (follows the CLI's own breaking changes) |
 
 ### Trigger and forget
 
@@ -111,8 +118,8 @@ npm ci
 npm run typecheck && npm test && npm run build
 ```
 
-Releases: run the **Release** workflow (it builds `master`) with a version; it builds `dist/`, tags `vX.Y.Z` and
-moves `vX`.
+Releases: run the **Release** workflow (it builds `master`). It builds `dist/`, tags
+`v<cli>.<build>` (the next build number for the bundled CLI version) and moves `v<cli>` and `v<major>`.
 
 ## License
 
