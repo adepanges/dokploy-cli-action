@@ -12,14 +12,15 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: master
-      - uses: actions/setup-node@v7
+          persist-credentials: false # dependency scripts must not find a write token
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
@@ -48,6 +49,7 @@ jobs:
           git tag "v$VERSION"
           git tag -f "v$CLI"
           git tag -f "v${CLI%%.*}"
-          git push origin "v$VERSION"
-          git push -f origin "v$CLI" "v${CLI%%.*}"
+          REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push "$REMOTE" "v$VERSION"
+          git push -f "$REMOTE" "v$CLI" "v${CLI%%.*}"
           gh release create "v$VERSION" --generate-notes --title "v$VERSION (@dokploy/cli $CLI)"

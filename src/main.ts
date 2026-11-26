@@ -57,10 +57,11 @@ async function main() {
 
   const stdout = runCli(cmd, url, key, headers);
   core.setOutput("result", stdout);
+  console.log(`dokploy ${cmd.path.join(" ")}: ok`);
   try {
-    console.log(JSON.stringify(Redact.json(JSON.parse(stdout)), null, 2));
+    for (const line of Redact.envNames(JSON.parse(stdout))) console.log(line);
   } catch {
-    console.log(`dokploy ${cmd.path.join(" ")}: ok`);
+    // not JSON: nothing to list
   }
 
   if (!wait) return;
@@ -71,8 +72,10 @@ async function main() {
   core.setOutput("deployment-status", d.status);
   console.log(`deployment ${d.deploymentId}: ${d.status}`);
   if (d.status !== "done") {
-    const log = await api.logs(d.deploymentId).catch(message);
-    await core.group("deployment log", async () => console.log(log));
+    if (core.getBooleanInput("print-logs")) {
+      const log = await api.logs(d.deploymentId).catch(message);
+      await core.group("deployment log", async () => console.log(log));
+    }
     throw new Error(`deployment ${d.status}: ${d.errorMessage ?? "see the deployment log"}`);
   }
 }

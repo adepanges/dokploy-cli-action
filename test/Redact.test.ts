@@ -2,25 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Redact } from "../src/Redact.ts";
 
-test("Redact hides env values and secret fields, keeps the rest", () => {
-  const out = Redact.json({
+test("Redact lists env names only, from strings, arrays and objects", () => {
+  const out = Redact.envNames({
     name: "app",
-    composeId: "abc",
+    webhookUrl: "https://hooks.slack.com/services/SECRET",
+    customGitUrl: "https://token@github.com/x/y",
     env: '# c\nDATABASE_URL=postgres://u:p@h/db\nKEY="-----BEGIN KEY-----\nMIIEvQIBADANBg\n-----END KEY-----"\nexport EMPTY=\n',
     previewBuildArgs: "A=1",
     buildSecrets: ["S=hunter2"],
-    databasePassword: "hunter2",
-    refreshToken: "t",
-    nested: [{ apiKey: "k", environmentId: "e" }],
+    nested: [{ env: { OBJ_VAR: "secret" } }],
   });
-  assert.deepEqual(out, {
-    name: "app",
-    composeId: "abc",
-    env: ["DATABASE_URL: ok", "KEY: ok", "EMPTY: ok"],
-    previewBuildArgs: ["A: ok"],
-    buildSecrets: [["S: ok"]],
-    databasePassword: "***",
-    refreshToken: "***",
-    nested: [{ apiKey: "***", environmentId: "e" }],
-  });
+  assert.deepEqual(out, ["DATABASE_URL: ok", "KEY: ok", "EMPTY: ok", "A: ok", "S: ok", "OBJ_VAR: ok"]);
+  assert.ok(!JSON.stringify(out).match(/SECRET|token@|hunter2|secret|MIIE/));
 });

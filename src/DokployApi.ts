@@ -17,6 +17,15 @@ export class DokployApi {
     this.headers = headers;
   }
 
+  // Following a redirect would carry x-api-key and the extra headers to another host.
+  static redirectError(status: number, location: string | null | undefined) {
+    let host = "another URL";
+    try {
+      host = new URL(location ?? "").host || host;
+    } catch {}
+    return new Error(`Dokploy answered ${status}, a redirect to ${host}; not followed, it would send the API key there. Behind an auth proxy (e.g. Cloudflare Access)? Pass its headers via \`headers\``);
+  }
+
   static isHtml(body: string) {
     return /^"?</.test(body.trimStart());
   }
@@ -24,8 +33,10 @@ export class DokployApi {
   async get<T>(path: string, params: Record<string, string>): Promise<T> {
     const res = await fetch(`${this.url}/api/${path}?${new URLSearchParams(params)}`, {
       headers: { ...this.headers, "x-api-key": this.key },
+      redirect: "manual",
     });
     const body = await res.text();
+    if (res.status >= 300 && res.status < 400) throw DokployApi.redirectError(res.status, res.headers.get("location"));
     if (DokployApi.isHtml(body)) throw new Error(`GET ${path} -> ${res.status}: ${DokployApi.AUTH_PROXY_HINT}`);
     if (!res.ok) throw new Error(`GET ${path} -> ${res.status}: ${body.slice(0, 300)}`);
     return JSON.parse(body);

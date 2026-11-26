@@ -1,23 +1,24 @@
 import { parse } from "dotenv";
 
-// For the job log only: dotenv blobs become `NAME: ok`, secret-looking fields `***`. `result` stays raw.
+// The job log never shows CLI JSON (webhook URLs, git/db URLs, compose files, mounts all carry secrets).
+// It shows only the names of env vars found in dotenv-like fields, as `NAME: ok`. `result` stays raw.
 export class Redact {
   private static readonly DOTENV = /(env|buildArgs|buildSecrets)$/i;
-  private static readonly SECRET = /(password|secret|token|key)$/i;
 
-  static json(value: unknown): unknown {
-    return Redact.walk(value, "");
+  static envNames(value: unknown): string[] {
+    const names = new Set<string>();
+    Redact.walk(value, "", names);
+    return [...names].map((name) => `${name}: ok`);
   }
 
-  private static walk(value: unknown, key: string): unknown {
-    if (typeof value === "string" && value) {
-      if (Redact.DOTENV.test(key)) return Object.keys(parse(value)).map((name) => `${name}: ok`);
-      if (Redact.SECRET.test(key)) return "***";
+  private static walk(value: unknown, key: string, names: Set<string>) {
+    if (Redact.DOTENV.test(key)) {
+      if (typeof value === "string") Object.keys(parse(value)).forEach((n) => names.add(n));
+      else if (Array.isArray(value)) value.forEach((v) => Redact.walk(v, key, names));
+      else if (value && typeof value === "object") Object.keys(value).forEach((n) => names.add(n));
+      return;
     }
-    if (Array.isArray(value)) return value.map((v) => Redact.walk(v, key));
-    if (value && typeof value === "object") {
-      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, Redact.walk(v, k)]));
-    }
-    return value;
+    if (Array.isArray(value)) value.forEach((v) => Redact.walk(v, "", names));
+    else if (value && typeof value === "object") Object.entries(value).forEach(([k, v]) => Redact.walk(v, k, names));
   }
 }

@@ -12,8 +12,8 @@ Actions, and optionally wait until a deployment has finished.
 - Target by `id` or exact `name`, for any group: `compose deploy` gets `--composeId`, `postgres stop`
   gets `--postgresId`.
 - Works behind an auth proxy such as Cloudflare Access: pass its headers in `headers`.
-- The job log shows env vars as `NAME: ok` and hides secret-looking fields; the raw JSON is only in
-  the `result` output.
+- The job log never prints the CLI's JSON: only `dokploy <command>: ok` and the names of any env vars in
+  it (`NAME: ok`). The raw JSON is only in the `result` output.
 
 ## Usage
 
@@ -104,6 +104,7 @@ drops it. Run `npx @dokploy/cli <group> <command> --help` for a command's flags.
 | `wait` | `true` | `compose`/`application` deploy and redeploy: wait for the result |
 | `wait-timeout` | `600` | Seconds before the step fails |
 | `poll-interval` | `5` | Seconds between status checks |
+| `print-logs` | `false` | Print the last 200 log lines of a failed deployment (they can contain env values a build echoes) |
 | `headers` | | JSON or YAML object of extra HTTP headers for every request |
 
 ## Outputs
@@ -114,7 +115,8 @@ drops it. Run `npx @dokploy/cli <group> <command> --help` for a command's flags.
 | `deployment-id` | The deployment waited for |
 | `deployment-status` | `done`, `error` or `cancelled` |
 
-When a deployment fails, its last 200 log lines are printed in a collapsed group.
+When a deployment fails, the step fails with Dokploy's `errorMessage`; set `print-logs: true` to also
+print its last 200 log lines in a collapsed group.
 
 ## Notes
 
@@ -123,6 +125,8 @@ When a deployment fails, its last 200 log lines are printed in a collapsed group
   are triggered and the step returns.
 - The deployment waited for is the first one created after the trigger; two deploys of the same target
   started at the same moment can be confused.
+- Redirects are refused, by the action and by the bundled CLI: following one would send the API key
+  and `headers` to another host.
 - The bundled CLI is patched at runtime for two things: the extra `headers`, and read commands with
   parameters (e.g. `compose one`), which `@dokploy/cli` 0.30.7 sends in a shape the server rejects.
 
