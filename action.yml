@@ -15,11 +15,15 @@ inputs:
   print-logs: { description: "When a waited-for deployment fails, print its last 200 log lines (may contain env values the build echoes)", required: false, default: "false" }
   wait-timeout: { description: "Seconds to wait before failing", required: false, default: "600" }
   poll-interval: { description: "Seconds between status checks", required: false, default: "5" }
+  ready-url: { description: "Optional. After a waited-for deploy is done, poll this URL (every poll-interval) until it answers 2xx; redirects are not followed and `headers` are not sent to it", required: false, default: "" }
+  ready-match: { description: "Optional, with ready-url: text the response body must contain, e.g. the commit sha your health endpoint reports", required: false, default: "" }
+  ready-timeout: { description: "Seconds ready-url may take before the step fails", required: false, default: "120" }
   headers: { description: "JSON or YAML object of extra HTTP headers for every request, e.g. Cloudflare Access service-token headers", required: false, default: "" }
 outputs:
   result: { description: "Raw JSON printed by the CLI command (may contain secrets; the job log only shows env names)" }
   deployment-id: { description: "Id of the deployment this run waited for (wait=true)" }
   deployment-status: { description: "Final deployment status: done, error or cancelled (wait=true)" }
+  ready: { description: "true once ready-url answered (only set when ready-url is)" }
 runs:
   using: node24
   main: dist/index.js

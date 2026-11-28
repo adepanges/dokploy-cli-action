@@ -53,6 +53,22 @@ A major release (a minor one while in 0.x) is the only kind that renames or remo
     wait: false
 ```
 
+### Wait until the app serves
+
+Dokploy reports a deployment `done` once its containers have started, which can be a few seconds
+before the app answers. `ready-url` (optional) keeps the step going until that URL answers 2xx,
+and `ready-match` until its body also contains a given text, such as the commit your health
+endpoint reports:
+
+```yaml
+  with:
+    command: compose deploy
+    id: abc123
+    ready-url: https://api.example.com/health
+    ready-match: ${{ github.sha }}   # or a short sha, if that is what the endpoint prints
+    ready-timeout: 180
+```
+
 ### By name
 
 Names are matched exactly through `<group>.search`, which Dokploy has for compose, application,
@@ -112,6 +128,9 @@ drops it. Run `npx @dokploy/cli <group> <command> --help` for a command's flags.
 | `poll-interval` | `5` | Seconds between status checks |
 | `print-logs` | `false` | Print the last 200 log lines of a failed deployment (they can contain env values a build echoes) |
 | `headers` | | JSON or YAML object of extra HTTP headers for every request |
+| `ready-url` | | Optional: after the deployment is `done`, poll this URL until it answers 2xx |
+| `ready-match` | | Optional, with `ready-url`: text the response body must contain |
+| `ready-timeout` | `120` | Seconds `ready-url` may take before the step fails |
 
 ## Outputs
 
@@ -120,6 +139,7 @@ drops it. Run `npx @dokploy/cli <group> <command> --help` for a command's flags.
 | `result` | Raw JSON printed by the CLI. May contain secrets (e.g. `compose one` returns `env`): don't echo it. |
 | `deployment-id` | The deployment waited for |
 | `deployment-status` | `done`, `error` or `cancelled` |
+| `ready` | `true` once `ready-url` answered (set only with `ready-url`) |
 
 When a deployment fails, the step fails with Dokploy's `errorMessage`; set `print-logs: true` to also
 print its last 200 log lines in a collapsed group.
@@ -133,6 +153,8 @@ print its last 200 log lines in a collapsed group.
   started at the same moment can be confused.
 - Redirects are refused, by the action and by the bundled CLI: following one would send the API key
   and `headers` to another host.
+- `ready-url` gets no `headers` and follows no redirect, and its response body is never printed: the
+  URL must answer without the Dokploy credentials (a public health endpoint, or one your proxy bypasses).
 - The bundled CLI is patched at runtime for two things: the extra `headers`, and read commands with
   parameters (e.g. `compose one`), which `@dokploy/cli` 0.30.7 sends in a shape the server rejects.
 
