@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Command } from "./Command.ts";
 import { DokployApi } from "./DokployApi.ts";
+import { ReadyCheck } from "./ReadyCheck.ts";
 import { Redact } from "./Redact.ts";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -53,6 +54,10 @@ async function main() {
   if (wait && !cmd.id) throw new Error(`wait needs a target: set \`id\`, \`name\` or ${cmd.idField} in args`);
   const timeoutSeconds = wait ? seconds("wait-timeout") : 0;
   const intervalSeconds = wait ? seconds("poll-interval") : 0;
+  const readyUrl = core.getInput("ready-url");
+  if (readyUrl && !wait) throw new Error("ready-url needs a waited-for deploy (compose/application deploy or redeploy, wait: true)");
+  if (readyUrl && !/^https?:\/\//.test(readyUrl)) throw new Error("ready-url must be an http(s) URL");
+  const readyTimeout = readyUrl ? seconds("ready-timeout") : 0;
   const since = new Set(wait ? (await api.deployments(cmd.group, cmd.id!)).map((d) => d.deploymentId) : []);
 
   const stdout = runCli(cmd, url, key, headers);
@@ -78,6 +83,14 @@ async function main() {
     }
     throw new Error(`deployment ${d.status}: ${d.errorMessage ?? "see the deployment log"}`);
   }
+
+  if (!readyUrl) return;
+  await ReadyCheck.waitFor(
+    { url: readyUrl, match: core.getInput("ready-match"), timeoutSeconds: readyTimeout, intervalSeconds },
+    (state) => console.log(`ready-url: waiting (${state})`),
+  );
+  core.setOutput("ready", "true");
+  console.log("ready-url: ready");
 }
 
 main().catch((e) => core.setFailed(message(e)));
